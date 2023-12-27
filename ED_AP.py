@@ -48,6 +48,7 @@ class EDAutopilot:
             "WaitForAutoDockTimer": 120,   # After docking granted, wait this amount of time for us to get docked with autodocking
             "SunBrightThreshold": 125,     # The low level for brightness detection, range 0-255, want to mask out darker items
             "FuelScoopTimeOut": 35,        # number of second to wait for full tank, might mean we are not scooping well or got a small scooper
+            "ship_delay" : 0,
             "DockingRetries": 30,          # number of time to attempt docking
             "HotKey_StartFSD": "home",     # if going to use other keys, need to look at the python keyboard package
             "HotKey_StartSC": "ins",       # to determine other keynames, make sure these keys are not used in ED bindings
@@ -345,6 +346,10 @@ class EDAutopilot:
         self.keys.send('ExplorationFSSEnter')
         sleep(2.5)
 
+        #Get whole bottom half of the screen
+        imgFile = "FSS-" + self.jn.ship_state()["location"]+".png"
+        scr_reg.capture_region_save('fss_full', imgFile)
+
         # look for a circle or signal in this region
         elw_image, (minVal, maxVal, minLoc, maxLoc), match = scr_reg.match_template_in_region('fss', 'elw')
         elw_sig_image, (minVal1, maxVal1, minLoc1, maxLoc1), match = scr_reg.match_template_in_image(elw_image, 'elw_sig')
@@ -433,6 +438,8 @@ class EDAutopilot:
     # determine the x,y offset from center of the compass of the nav point
     def get_nav_offset(self, scr_reg):
 
+        #sleep(range(self.config['JumpTries']))
+        sleep(0.7)
         icompass_image, (minVal, maxVal, minLoc, maxLoc), match = scr_reg.match_template_in_region('compass', 'compass')
         pt = maxLoc
 
@@ -740,10 +747,23 @@ class EDAutopilot:
 
         return 90-result
 
+    def test(self):
+            self.keys.send('SetSpeed50')
+            self.update_ap_status("test pitchup 360")
+            #self.pitchUp(360)
+            self.pitchDown(90)
+            self.pitchDown(90)
+            self.pitchDown(90)
+            self.pitchDown(90)
+            #self.rotateLeft(360)
+            #self.yawLeft(360)
+
+
     # nav_align will use the compass to find the nav point position.  Will then perform rotation and pitching
     # to put the nav point in the middle, i.e. target right in front of us
     #         
     def nav_align(self, scr_reg):
+        self.update_ap_status("nav_align")
         close = 2
         if not (self.jn.ship_state()['status'] == 'in_supercruise' or self.jn.ship_state()['status'] == 'in_space'):
             logger.error('align=err1')
@@ -761,9 +781,14 @@ class EDAutopilot:
             return
 
         # nav point must be behind us, pitch up until somewhat in front of us
+        c = 0
         while not off:
+            self.update_ap_status("nav_align pitchdown 90 " + str(c) + "off = " + str(off))
+            c = c + 1
             self.pitchDown(90)
             off = self.get_nav_offset(scr_reg)
+
+        self.update_ap_status("nav_align pitchdown 45 " + "off = " + str(off))
 
             # check if converged, unlikely at this point
         if abs(off['x']) < close and abs(off['y']) < close:
@@ -779,7 +804,10 @@ class EDAutopilot:
                 self.keys.send('SetSpeed100')
                 break
 
+            c = 0
             while not off:
+                self.update_ap_status("nav_align pitch down 45 " + str(c) + "off = " + str(off))
+                c = c + 1
                 self.pitchDown(45)
                 off = self.get_nav_offset(scr_reg)
 
@@ -793,15 +821,19 @@ class EDAutopilot:
             if (abs(off['x']) > close):
                 # top right quad, then roll right to get to 90 up
                 if (off['x'] > 0 and off['y'] > 0):
+                    self.update_ap_status("nav_align RollRightButton" + str(htime))
                     self.keys.send('RollRightButton', hold=htime)
                     # bottom right quad, then roll left
                 elif (off['x'] > 0 and off['y'] < 0):
+                    self.update_ap_status("nav_align RollLeftButton" + str(htime))
                     self.keys.send('RollLeftButton', hold=htime)
                     # top left quad, then roll left
                 elif (off['x'] < 0 and off['y'] > 0):
+                    self.update_ap_status("nav_align RollLEftButton" + str(htime))
                     self.keys.send('RollLeftButton', hold=htime)
                     # bottom left quad, then roll right
                 else:
+                    self.update_ap_status("nav_align RollRightButton" + str(htime))
                     self.keys.send('RollRightButton', hold=htime)
             else:
                 #print("X is <= "+str(close))
@@ -810,6 +842,7 @@ class EDAutopilot:
             sleep(0.15)  # wait for image to stablize
             off = self.get_nav_offset(scr_reg)
             while not off:
+                self.update_ap_status("nav_align Pitchdown 45")
                 self.pitchDown(45)
                 off = self.get_nav_offset(scr_reg)
 
@@ -822,8 +855,10 @@ class EDAutopilot:
             if (abs(off['y']) > close):
                 if (off['y'] < 0):
                     self.keys.send('PitchDownButton', hold=utime)
+                    #self.update_ap_status("nav_align Pitchdown " + str(utime))
                 else:
                     self.keys.send('PitchUpButton', hold=utime)
+                    #self.update_ap_status("nav_align Pitchup " + str(utime))
             else:
                 #print("Y is <= "+str(close))
                 pass
@@ -986,7 +1021,10 @@ class EDAutopilot:
     #   - perform fss (if enabled) 
     def position(self, scr_reg, did_refuel=True):
         logger.debug('position')
-        add_time = 5
+        if did_refuel:
+            add_time = 9
+        else:
+            add_time = 5
 
         self.vce.say("Maneuvering")
 
@@ -1040,8 +1078,9 @@ class EDAutopilot:
 
             logger.debug('jump= try:'+str(i))
             if not (self.jn.ship_state()['status'] == 'in_supercruise' or self.jn.ship_state()['status'] == 'in_space'):
-                logger.error('jump=err1')
-                raise Exception('not ready to jump')
+                logger.error('jump=err1 status=' + self.jn.ship_state()['status'])
+                #raise Exception('not ready to jump')
+                return False
             sleep(0.5)
             logger.debug('jump= start fsd')
             
@@ -1132,7 +1171,7 @@ class EDAutopilot:
             while not self.jn.ship_state()['is_scooping'] and not self.jn.ship_state()['fuel_percent'] == 100:
                 if ((time.time()-startime) > int(self.config['FuelScoopTimeOut'])):
                     self.vce.say("Refueling abort, insufficient scooping")
-                    return False
+                    return True
 
             logger.debug('refuel= wait for refuel')
             
@@ -1259,7 +1298,11 @@ class EDAutopilot:
 
     #
     def fsd_assist(self, scr_reg):
-        logger.debug('self.jn.ship_state='+str(self.jn.ship_state()))
+        #logger.debug('self.jn.ship_state='+str(self.jn.ship_state()))
+        #self.update_ap_status("test")
+        #self.update_overlay()
+        #self.test()
+        #return
 
         starttime = time.time()
         starttime -= 20  # to account for first instance not doing positioning
@@ -1269,13 +1312,26 @@ class EDAutopilot:
             self.update_overlay()
 
             if self.jn.ship_state()['status'] == 'in_space' or self.jn.ship_state()['status'] == 'in_supercruise':
-                self.update_ap_status("Align")
+                jumped = False
+                for x in range(3):
+                    self.update_ap_status("Align")
 
-                self.mnvr_to_target(scr_reg)
+                    self.mnvr_to_target(scr_reg)
 
-                self.update_ap_status("Jump")
+                    self.update_ap_status("Jump")
 
-                self.jump(scr_reg)
+                    jumped = self.jump(scr_reg)
+                    if jumped:
+                        break
+                    logger.error('Failed jump status=' + self.jn.ship_state()['status'])
+                    
+                    self.keys.send('YawRightButton', hold=0.005)
+                    self.keys.send('HyperSuperCombination', hold=1)
+                    while self.jn.ship_state()['status'] != 'in_supercruise':
+                        sleep(1)
+                    logger.error('status after =' + self.jn.ship_state()['status'])
+                if not jumped:
+                    raise Exception('Jumped failed')
 
                 # update jump counters
                 self.total_dist_jumped += self.jn.ship_state()['dist_jumped']

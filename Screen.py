@@ -111,5 +111,9 @@ class Screen:
         return image
         
        
+    def get_screen_region_save(self, reg, filename):      
+        image = self.mss.grab((int(reg[0]), int(reg[1]), 
+                                        int(reg[2]), int(reg[3]) ))
+        mss.tools.to_png(image.rgb, image.size, output=filename)
    
 
