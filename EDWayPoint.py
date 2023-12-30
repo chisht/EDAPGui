@@ -223,19 +223,23 @@ class EDWayPoint:
         ap.keys.send('UI_Select')
         sleep(.5)
  
-        #print("Target:"+target_name)       
+        print("Target:"+target_name)       
         # type in the System name
         typewrite(target_name, interval=0.25)
+        typewrite("\n", interval=0.25)
         sleep(1)         
   
         # send enter key
         ap.keys.send_key('Down', 28)
-        sleep(0.15)
+        sleep(0.5)
         ap.keys.send_key('Up', 28)
 
         sleep(1)
-        self.mouse.do_click(x, y)
-        sleep(0.1)
+        ap.keys.send('UI_Down')
+        #self.mouse.do_click(x, y)
+        #sleep(0.1)
+        ap.keys.send('UI_Select')
+        sleep(10)
         ap.keys.send('UI_Right', repeat=4) 
      
         sleep(0.1)       
